@@ -1,76 +1,117 @@
 import os
-import cv2
-import numpy as np
+import sys
+import argparse
 import joblib
+import numpy as np
 from sklearn.metrics import accuracy_score, classification_report
 
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+from model_utils import (
+    LABEL_NAMES,
+    get_project_root,
+    iter_labeled_image_paths,
+    preprocess_cnn_image,
+    preprocess_flatten_image,
+    preprocess_mobilenet_image,
+)
+
+
+def load_model(model_path):
+    ext = os.path.splitext(model_path)[1].lower()
+    if ext == '.pkl':
+        model = joblib.load(model_path)
+        if hasattr(model, 'named_steps') and 'hog' in model.named_steps:
+            model_type = 'pkl_hog'
+        else:
+            model_type = 'pkl_flat'
+        return model, model_type
+    if ext in ('.h5', '.keras'):
+        from tensorflow.keras.models import load_model as keras_load_model
+        model = keras_load_model(model_path)
+        model_type = 'keras_mobilenet' if 'mobilenet' in os.path.basename(model_path).lower() else 'keras_cnn'
+        return model, model_type
+    raise ValueError(f'不支援的模型格式: {ext}')
+
+
+def collect_predictions(model, model_type, test_dir):
+    y_true = []
+    y_pred = []
+    mobilenet_batch = []
+    mobilenet_labels = []
+
+    for image_path, label_idx in iter_labeled_image_paths(test_dir):
+        import cv2
+        image = cv2.imread(image_path)
+        if image is None:
+            continue
+
+        if model_type == 'keras_mobilenet':
+            mobilenet_batch.append(preprocess_mobilenet_image(image))
+            mobilenet_labels.append(label_idx)
+            continue
+
+        if model_type == 'keras_cnn':
+            mobilenet_batch.append(preprocess_cnn_image(image))
+            mobilenet_labels.append(label_idx)
+            continue
+
+        if model_type == 'pkl_hog':
+            prediction = model.predict([image])[0]
+            y_true.append(label_idx)
+            y_pred.append(int(prediction))
+            continue
+
+        features = preprocess_flatten_image(image).reshape(1, -1)
+        prediction = model.predict(features)[0]
+        y_true.append(label_idx)
+        y_pred.append(int(prediction))
+
+    if model_type in ('keras_mobilenet', 'keras_cnn') and mobilenet_batch:
+        X_test = np.array(mobilenet_batch, dtype=np.float32)
+        prediction_probs = model.predict(X_test, batch_size=32, verbose=0)
+        y_true = mobilenet_labels
+        y_pred = np.argmax(prediction_probs, axis=1).tolist()
+
+    return np.array(y_true), np.array(y_pred)
+
+
 def main():
-    # 1. 設定模型與資料集路徑
-    model_path = 'rps_svm_model.pkl'
-    # 假設 demo 資料夾與 dataset 資料夾在同一個主目錄下
-    test_dir = '../dataset/test' 
+    parser = argparse.ArgumentParser(description='Evaluate a trained model on the RPS test set')
+    parser.add_argument('-m', '--model', type=str, default='rps_svm_model.pkl', help='Path to the model file')
+    args = parser.parse_args()
+
+    base_dir = get_project_root()
+    default_model_path = os.path.join(base_dir, 'demo', args.model)
+    model_path = args.model if os.path.isabs(args.model) else default_model_path
+    test_dir = os.path.join(base_dir, 'dataset', 'test')
 
     if not os.path.exists(model_path):
-        print(f"❌ 錯誤：找不到模型檔案 '{model_path}'，請確認是否已放入 demo 資料夾。")
+        print(f"[ERROR] Model file not found: {model_path}")
         return
-    
+
     if not os.path.exists(test_dir):
-        print(f"❌ 錯誤：找不到測試資料集 '{test_dir}'。")
-        print("請確認 dataset/test 資料夾是否存在於上一層目錄。")
+        print(f"[ERROR] Test dataset not found: {test_dir}")
         return
 
-    # 2. 載入模型
-    print("⏳ 載入模型中...")
-    clf = joblib.load(model_path)
-    print("✅ 模型載入成功！\n")
+    print('[LOAD] Loading model...')
+    model, model_type = load_model(model_path)
+    print('[OK] Model loaded.\n')
 
-    label_map = {'rock': 0, 'paper': 1, 'scissors': 2}
-    X_test, y_test = [], []
+    print('[LOAD] Reading test images and running predictions...')
+    y_true, y_pred = collect_predictions(model, model_type, test_dir)
 
-    # 3. 讀取並處理測試圖片
-    print("📂 正在讀取測試集圖片並進行預測...")
-    for category, label_idx in label_map.items():
-        category_path = os.path.join(test_dir, category)
-        
-        # 處理資料夾內可能多包一層的情況
-        if not os.path.exists(category_path):
-            subdirs = [d for d in os.listdir(test_dir) if os.path.isdir(os.path.join(test_dir, d))]
-            if subdirs:
-                category_path = os.path.join(test_dir, subdirs[0], category)
-
-        if not os.path.exists(category_path):
-            print(f"⚠️ 找不到 {category} 的圖片資料夾，略過...")
-            continue
-            
-        for filename in os.listdir(category_path):
-            if filename.lower().endswith(('.png', '.jpg', '.jpeg')):
-                img_path = os.path.join(category_path, filename)
-                img = cv2.imread(img_path)
-                
-                if img is not None:
-                    # 資料前處理 (必須與訓練時一致)
-                    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-                    resized = cv2.resize(gray, (64, 64))
-                    X_test.append(resized.flatten())
-                    y_test.append(label_idx)
-
-    if not X_test:
-        print("❌ 錯誤：沒有讀取到任何圖片，請檢查資料夾結構。")
+    if len(y_true) == 0:
+        print('[ERROR] No test images were loaded. Please check the dataset structure.')
         return
 
-    # 正規化
-    X_test = np.array(X_test) / 255.0
-    y_test = np.array(y_test)
+    accuracy = accuracy_score(y_true, y_pred)
+    print("\nTest summary:")
+    print(f"Total test images: {len(y_true)}")
+    print(f"Accuracy: {accuracy * 100:.2f}%\n")
+    print('Classification report:')
+    print(classification_report(y_true, y_pred, labels=list(range(len(LABEL_NAMES))), target_names=LABEL_NAMES, zero_division=0))
 
-    # 4. 進行預測與評估
-    y_pred = clf.predict(X_test)
-    accuracy = accuracy_score(y_test, y_pred)
-    
-    print(f"\n📊 測試結果統整:")
-    print(f"總共測試了 {len(y_test)} 張圖片")
-    print(f"🎯 模型準確率: {accuracy * 100:.2f}%\n")
-    print("📝 分類詳細報告:")
-    print(classification_report(y_test, y_pred, target_names=['Rock', 'Paper', 'Scissors']))
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     main()

@@ -41,6 +41,7 @@
 - Random Forest
 - Small CNN
 - MobileNetV2
+- EfficientNetB0
 
 ---
 
@@ -68,7 +69,8 @@ RSP_demo/
 │  ├─ rps_pca_rf_model.pkl
 │  ├─ rps_rf_model.pkl
 │  ├─ rps_small_cnn.keras
-│  └─ rps_mobilenetv2.keras
+│  ├─ rps_mobilenetv2.keras
+│  └─ rps_efficientnetb0.keras
 │
 ├─ train/
 │  ├─ requirements.txt
@@ -78,7 +80,8 @@ RSP_demo/
 │  ├─ train_pca_rf.py
 │  ├─ train_rf.py
 │  ├─ train_small_cnn.py
-│  └─ train_mobilenetv2.py
+│  ├─ train_mobilenetv2.py
+│  └─ train_efficientnetb0.py
 │
 ├─ model_utils.py
 ├─ README.md
@@ -121,6 +124,7 @@ RSP_demo/
 - `IMAGE_SIZE = (64, 64)`：傳統模型使用
 - `CNN_IMAGE_SIZE = (64, 64)`：Small CNN 使用
 - `MOBILENET_IMAGE_SIZE = (96, 96)`：MobileNetV2 使用
+- `EFFICIENTNET_IMAGE_SIZE = (224, 224)`：EfficientNetB0 使用
 
 ---
 
@@ -207,6 +211,17 @@ RSP_demo/
 
 ---
 
+### `train/train_efficientnetb0.py`
+訓練 EfficientNetB0。
+
+輸入：
+- RGB
+- `224x224`
+
+使用 Keras / TensorFlow 的 EfficientNetB0 做 transfer learning。
+
+---
+
 ## 3.4 demo/
 
 ### `demo/test.py`
@@ -252,6 +267,7 @@ RSP_demo/
 | Random Forest | 傳統 ML | 56.45% |
 | Small CNN | 深度學習 | 83.33% |
 | MobileNetV2 | 深度學習 | 93.82% |
+| EfficientNetB0 | 深度學習 | 待訓練 / 待驗證 |
 
 目前最值得作為報告主比較的兩個模型：
 - **Small CNN**
@@ -385,6 +401,14 @@ uv run python train/train_mobilenetv2.py
 
 ---
 
+## 7.8 EfficientNetB0
+
+```bash
+uv run python train/train_efficientnetb0.py
+```
+
+---
+
 # 8. 如何測試模型
 
 統一測試腳本：
@@ -410,6 +434,11 @@ uv run python demo/test.py -m rps_small_cnn.keras
 uv run python demo/test.py -m rps_mobilenetv2.keras
 ```
 
+### EfficientNetB0
+```bash
+uv run python demo/test.py -m rps_efficientnetb0.keras
+```
+
 ---
 
 # 9. 如何做即時攝影機 Demo
@@ -426,7 +455,13 @@ uv run python demo/carema.py -m demo/rps_small_cnn.keras
 uv run python demo/carema.py -m demo/rps_mobilenetv2.keras
 ```
 
-## 9.3 Baseline SVM
+## 9.3 EfficientNetB0
+
+```bash
+uv run python demo/carema.py -m demo/rps_efficientnetb0.keras
+```
+
+## 9.4 Baseline SVM
 
 ```bash
 uv run python demo/carema.py -m demo/rps_svm_model.pkl
@@ -446,11 +481,16 @@ uv run python demo/carema.py -m demo/rps_svm_model.pkl
 建議實測流程：
 1. 先測 `Small CNN`
 2. 再測 `MobileNetV2`
-3. 比較：
+3. 若需要更強的 transfer learning 基準，可再測 `EfficientNetB0`
+4. 比較：
    - 啟動速度
    - FPS
    - 預測穩定度
    - Rock / Paper / Scissors / Error 的表現
+
+補充：
+- `EfficientNetB0` 可能比 `MobileNetV2` 在 Raspberry Pi 4 上更慢，但若對實際光線變化更穩，仍值得作為比較模型。
+- 若最終目標是錄製 Demo 影片，仍應綜合考慮辨識穩定度與 FPS，而不是只看離線準確率。
 
 最後選一個最適合錄影片的模型。
 

@@ -12,6 +12,7 @@ from model_utils import (
     get_project_root,
     iter_labeled_image_paths,
     preprocess_cnn_image,
+    preprocess_efficientnet_image,
     preprocess_flatten_image,
     preprocess_mobilenet_image,
 )
@@ -29,7 +30,13 @@ def load_model(model_path):
     if ext in ('.h5', '.keras'):
         from tensorflow.keras.models import load_model as keras_load_model
         model = keras_load_model(model_path)
-        model_type = 'keras_mobilenet' if 'mobilenet' in os.path.basename(model_path).lower() else 'keras_cnn'
+        model_name = os.path.basename(model_path).lower()
+        if 'efficientnet' in model_name:
+            model_type = 'keras_efficientnet'
+        elif 'mobilenet' in model_name:
+            model_type = 'keras_mobilenet'
+        else:
+            model_type = 'keras_cnn'
         return model, model_type
     raise ValueError(f'不支援的模型格式: {ext}')
 
@@ -37,8 +44,8 @@ def load_model(model_path):
 def collect_predictions(model, model_type, test_dir):
     y_true = []
     y_pred = []
-    mobilenet_batch = []
-    mobilenet_labels = []
+    keras_batch = []
+    keras_labels = []
 
     for image_path, label_idx in iter_labeled_image_paths(test_dir):
         import cv2
@@ -47,13 +54,18 @@ def collect_predictions(model, model_type, test_dir):
             continue
 
         if model_type == 'keras_mobilenet':
-            mobilenet_batch.append(preprocess_mobilenet_image(image))
-            mobilenet_labels.append(label_idx)
+            keras_batch.append(preprocess_mobilenet_image(image))
+            keras_labels.append(label_idx)
+            continue
+
+        if model_type == 'keras_efficientnet':
+            keras_batch.append(preprocess_efficientnet_image(image))
+            keras_labels.append(label_idx)
             continue
 
         if model_type == 'keras_cnn':
-            mobilenet_batch.append(preprocess_cnn_image(image))
-            mobilenet_labels.append(label_idx)
+            keras_batch.append(preprocess_cnn_image(image))
+            keras_labels.append(label_idx)
             continue
 
         if model_type == 'pkl_hog':
@@ -67,10 +79,10 @@ def collect_predictions(model, model_type, test_dir):
         y_true.append(label_idx)
         y_pred.append(int(prediction))
 
-    if model_type in ('keras_mobilenet', 'keras_cnn') and mobilenet_batch:
-        X_test = np.array(mobilenet_batch, dtype=np.float32)
+    if model_type in ('keras_mobilenet', 'keras_efficientnet', 'keras_cnn') and keras_batch:
+        X_test = np.array(keras_batch, dtype=np.float32)
         prediction_probs = model.predict(X_test, batch_size=32, verbose=0)
-        y_true = mobilenet_labels
+        y_true = keras_labels
         y_pred = np.argmax(prediction_probs, axis=1).tolist()
 
     return np.array(y_true), np.array(y_pred)

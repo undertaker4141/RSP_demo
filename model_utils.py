@@ -3,12 +3,14 @@ import cv2
 import numpy as np
 from skimage.feature import hog
 from sklearn.metrics import accuracy_score, classification_report
+from tensorflow.keras.applications.efficientnet import preprocess_input as efficientnet_preprocess_input
 
 LABEL_MAP = {'rock': 0, 'paper': 1, 'scissors': 2}
 LABEL_NAMES = ['Rock', 'Paper', 'Scissors']
 IMAGE_SIZE = (64, 64)
 CNN_IMAGE_SIZE = (64, 64)
 MOBILENET_IMAGE_SIZE = (96, 96)
+EFFICIENTNET_IMAGE_SIZE = (224, 224)
 VALID_IMAGE_EXTENSIONS = ('.png', '.jpg', '.jpeg')
 
 
@@ -87,6 +89,12 @@ def preprocess_mobilenet_image(image, image_size=MOBILENET_IMAGE_SIZE):
     return rgb.astype(np.float32) / 255.0
 
 
+def preprocess_efficientnet_image(image, image_size=EFFICIENTNET_IMAGE_SIZE):
+    resized = cv2.resize(image, image_size)
+    rgb = cv2.cvtColor(resized, cv2.COLOR_BGR2RGB)
+    return efficientnet_preprocess_input(rgb.astype(np.float32))
+
+
 class HOGFeatureExtractor:
     def __init__(self, image_size=IMAGE_SIZE, orientations=9, pixels_per_cell=(8, 8), cells_per_block=(2, 2)):
         self.image_size = image_size
@@ -128,6 +136,12 @@ def load_cnn_dataset(folder_path, image_size=CNN_IMAGE_SIZE):
 def load_mobilenet_dataset(folder_path, image_size=MOBILENET_IMAGE_SIZE):
     raw_images, labels = load_raw_images_from_folder(folder_path)
     features = [preprocess_mobilenet_image(image, image_size=image_size) for image in raw_images]
+    return np.array(features, dtype=np.float32), labels
+
+
+def load_efficientnet_dataset(folder_path, image_size=EFFICIENTNET_IMAGE_SIZE):
+    raw_images, labels = load_raw_images_from_folder(folder_path)
+    features = [preprocess_efficientnet_image(image, image_size=image_size) for image in raw_images]
     return np.array(features, dtype=np.float32), labels
 
 

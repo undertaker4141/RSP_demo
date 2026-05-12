@@ -34,9 +34,14 @@ https://github.com/BiBaIsAFish/RSP_demo
 
 ## 評分標準
 
-- 成功在 Raspberry Pi 4 上執行 手勢辨識 50%
+- 成功在 Raspberry Pi 4 上執行 test.py & carema.py 50%
 - Demo 展示影片(carema) 15%
-    - 15 個手勢 (各5)
+    - 從兩個模型中選擇較強的模型，寫一支程式將 carema 接收到的畫面接到模型上進行分類，並錄一段 demo 10 個手勢的短片
+    - 執行 10 次手勢辨識，且須包含以下手勢
+        - 石頭(Rock)
+        - 剪刀(Scissors)
+        - 布(Paper)
+        - 其他錯誤手勢 (Error)
 - 報告 35%
 	- 需自行找兩個模型架構修改 20%
 		- 至少需呈現 accuracy, precision, recall, F1-score
